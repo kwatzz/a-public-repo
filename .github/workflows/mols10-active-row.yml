@@ -5,6 +5,10 @@ on:
     paths:
       - '.github/workflows/mols10-active-row.yml'
       - 'mols10/**'
+  pull_request:
+    paths:
+      - '.github/workflows/mols10-active-row.yml'
+      - 'mols10/**'
   workflow_dispatch:
 permissions:
   contents: read
