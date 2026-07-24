@@ -1,0 +1,81 @@
+name: QR72 critical number r=6 exact SAT
+on:
+  push:
+    paths:
+      - '.github/workflows/qr72-r6.yml'
+      - 'qr72/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and verify point set
+        run: |
+          set -euxo pipefail
+          base64 -d qr72/masks.txt.gz.b64 | gzip -dc > qr72/masks.txt
+          echo '312c28107eab56ca36ac8fd65e47afb1ee5e19b080355f8443d23e05edf471b3  qr72/masks.txt' | sha256sum -c -
+          test "$(wc -l < qr72/masks.txt)" -eq 2982
+      - name: Generate completeness-preserving r=6 CNF
+        run: |
+          set -euxo pipefail
+          python3 qr72/generate_critical_cnf.py qr72/masks.txt 6 qr72/critical_r6.cnf --map qr72/critical_r6.map | tee qr72/generate.log
+          head -1 qr72/critical_r6.cnf
+          sha256sum qr72/critical_r6.cnf qr72/critical_r6.map > qr72/cnf.sha256
+      - name: Build pinned CaDiCaL and DRAT-trim
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch rel-2.2.1 https://github.com/arminbiere/cadical.git tools/cadical
+          (cd tools/cadical && ./configure -O3 && make -j2)
+          git clone https://github.com/marijnheule/drat-trim.git tools/drat-trim
+          (cd tools/drat-trim && git checkout effa1dc && make)
+          tools/cadical/build/cadical --version | tee qr72/cadical.version
+          git -C tools/cadical rev-parse HEAD > qr72/cadical.commit
+          git -C tools/drat-trim rev-parse HEAD > qr72/drat-trim.commit
+      - name: Solve with proof logging
+        id: solve
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v timeout 20400 tools/cadical/build/cadical --no-binary qr72/critical_r6.cnf qr72/critical_r6.drat > qr72/solver.log 2> qr72/solver.time
+          rc=$?
+          echo "solver_exit=$rc" | tee qr72/status.txt
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          grep -E '^(s|v) ' qr72/solver.log | tail -30 || true
+          exit 0
+      - name: Check SAT model
+        if: steps.solve.outputs.rc == '10'
+        run: |
+          set -euxo pipefail
+          python3 qr72/check_model.py qr72/masks.txt qr72/critical_r6.map qr72/solver.log 6 | tee qr72/model_check.log
+      - name: Check UNSAT proof
+        if: steps.solve.outputs.rc == '20'
+        run: |
+          set -euxo pipefail
+          /usr/bin/time -v tools/drat-trim/drat-trim qr72/critical_r6.cnf qr72/critical_r6.drat > qr72/proof_check.log 2> qr72/proof_check.time
+          grep -E 's VERIFIED|VERIFIED' qr72/proof_check.log
+          zstd -19 -T0 --rm qr72/critical_r6.drat
+          sha256sum qr72/critical_r6.drat.zst > qr72/proof.sha256
+      - name: Mark timeout or error
+        if: steps.solve.outputs.rc != '10' && steps.solve.outputs.rc != '20'
+        run: |
+          echo 'INCOMPLETE_SOLVER_RUN' | tee qr72/incomplete.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qr72-r6-exact-result
+          path: |
+            qr72/*.log
+            qr72/*.time
+            qr72/*.version
+            qr72/*.commit
+            qr72/*.sha256
+            qr72/status.txt
+            qr72/incomplete.txt
+            qr72/critical_r6.drat.zst
+          if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 30
