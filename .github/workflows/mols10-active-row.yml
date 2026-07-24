@@ -1,0 +1,85 @@
+name: MOLS10 canonical active-row cases
+on:
+  push:
+    branches: [mols10-research-20260724]
+    paths:
+      - '.github/workflows/mols10-active-row.yml'
+      - 'mols10/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  solve:
+    strategy:
+      fail-fast: false
+      matrix:
+        item:
+          - {case: SX, omega: z4}
+          - {case: SX, omega: z2x2}
+          - {case: UU, omega: z4}
+          - {case: UU, omega: z2x2}
+          - {case: UW, omega: z4}
+          - {case: UW, omega: z2x2}
+          - {case: UX, omega: z4}
+          - {case: UX, omega: z2x2}
+          - {case: VX, omega: z4}
+          - {case: VX, omega: z2x2}
+          - {case: WW, omega: z4}
+          - {case: WW, omega: z2x2}
+          - {case: WX, omega: z4}
+          - {case: WX, omega: z2x2}
+          - {case: XX, omega: z4}
+          - {case: XX, omega: z2x2}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned Kissat with proof support
+        run: |
+          git clone https://github.com/arminbiere/kissat.git
+          cd kissat
+          git checkout 8af8e56f174b778aef3aa45af9f739b2a5f492c2
+          ./configure --quiet
+          make -j2
+          ./build/kissat --version
+      - name: Build DRAT checker
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git
+          make -C drat-trim
+      - name: Generate completeness-preserving formula
+        run: |
+          mkdir -p results
+          python3 mols10/encode_myrvold_canonical_active_row.py \
+            --case '${{ matrix.item.case }}' --omega '${{ matrix.item.omega }}' \
+            --output results/case.cnf --metadata results/case.meta.json \
+            | tee results/encode.log
+          sha256sum results/case.cnf results/case.meta.json > results/input.sha256
+      - name: Solve and check
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v -o results/time.log \
+            timeout --signal=TERM 10200 \
+            kissat/build/kissat --statistics results/case.cnf results/proof.drat \
+            > results/solver.log 2>&1
+          rc=$?
+          echo "$rc" > results/solver.status
+          grep '^s ' results/solver.log | tail -1 | tee results/result.txt
+          if grep -q '^s SATISFIABLE' results/solver.log; then
+            grep -E '^[sv] ' results/solver.log > results/model.out
+            python3 mols10/verify_myrvold_solver_output.py \
+              --cnf results/case.cnf --meta results/case.meta.json \
+              --model results/model.out --out results/decoded.json \
+              | tee results/model-check.log
+          elif grep -q '^s UNSATISFIABLE' results/solver.log; then
+            drat-trim/drat-trim results/case.cnf results/proof.drat \
+              | tee results/proof-check.log
+          fi
+          sha256sum results/* > results/all.sha256
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mols10-${{ matrix.item.case }}-${{ matrix.item.omega }}
+          path: results/
+          compression-level: 9
+          retention-days: 90
