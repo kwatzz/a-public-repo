@@ -4,6 +4,10 @@ on:
     paths:
       - '.github/workflows/qr72-r6.yml'
       - 'qr72/**'
+  pull_request:
+    paths:
+      - '.github/workflows/qr72-r6.yml'
+      - 'qr72/**'
   workflow_dispatch:
 permissions:
   contents: read
