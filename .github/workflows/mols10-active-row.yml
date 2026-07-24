@@ -64,7 +64,7 @@ jobs:
           set +e
           /usr/bin/time -v -o results/time.log \
             timeout --signal=TERM 10200 \
-            kissat/build/kissat --statistics results/case.cnf results/proof.drat \
+            kissat/build/kissat results/case.cnf results/proof.drat \
             > results/solver.log 2>&1
           rc=$?
           echo "$rc" > results/solver.status
