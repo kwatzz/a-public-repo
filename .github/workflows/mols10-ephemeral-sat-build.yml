@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - '.github/workflows/mols10-ephemeral-sat-build.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/mols10-ephemeral-sat-build.yml'
+      - 'mols10-ephemeral-trigger.txt'
   workflow_dispatch:
 
 permissions:
