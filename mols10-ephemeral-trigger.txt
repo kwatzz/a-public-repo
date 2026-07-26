@@ -1,0 +1,1 @@
+Ephemeral trigger for the MOLS(10) SAT-tool build. Delete after artifact retrieval.
