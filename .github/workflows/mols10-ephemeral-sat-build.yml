@@ -1,0 +1,50 @@
+name: mols10-ephemeral-sat-build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/mols10-ephemeral-sat-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Build Kissat 4.0.4
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --branch rel-4.0.4 https://github.com/arminbiere/kissat.git
+          cd kissat
+          ./configure
+          make -j"$(nproc)"
+          cd ..
+      - name: Build drat-trim and LRAT checker
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/marijnheule/drat-trim.git
+          make -C drat-trim -j"$(nproc)"
+      - name: Package exact binaries and provenance
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p sat-tools
+          cp kissat/build/kissat sat-tools/
+          cp drat-trim/drat-trim sat-tools/
+          test -f drat-trim/lrat-check && cp drat-trim/lrat-check sat-tools/ || true
+          git -C kissat rev-parse HEAD > sat-tools/kissat.commit.txt
+          git -C drat-trim rev-parse HEAD > sat-tools/drat-trim.commit.txt
+          (cd sat-tools && sha256sum * > SHA256SUMS.txt)
+          file sat-tools/* > sat-tools/FILE_TYPES.txt
+      - name: Upload SAT tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: mols10-sat-tools-linux-x86_64
+          path: sat-tools/
+          if-no-files-found: error
+          retention-days: 1
