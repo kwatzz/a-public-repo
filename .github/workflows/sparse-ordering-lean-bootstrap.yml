@@ -8,6 +8,13 @@ on:
       - '.github/workflows/sparse-ordering-lean-bootstrap.yml'
       - 'lean-toolchain'
       - 'formal-bootstrap/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/sparse-ordering-lean-bootstrap.yml'
+      - 'lean-toolchain'
+      - 'formal-bootstrap/**'
   workflow_dispatch:
 
 permissions:
