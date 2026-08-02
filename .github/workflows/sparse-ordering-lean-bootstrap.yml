@@ -40,7 +40,7 @@ jobs:
           lean --version | tee formal-bootstrap/lean-version.txt
           elan --version | tee formal-bootstrap/elan-version.txt
 
-      - name: Package exact installed toolchain
+      - name: Package and split exact installed toolchain
         shell: bash
         run: |
           set -euo pipefail
@@ -49,19 +49,48 @@ jobs:
           TOOLCHAIN_ROOT="$(dirname "$(dirname "$LEAN_BIN")")"
           TOOLCHAIN_PARENT="$(dirname "$TOOLCHAIN_ROOT")"
           TOOLCHAIN_NAME="$(basename "$TOOLCHAIN_ROOT")"
-          tar --zstd -cf formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst \
-            -C "$TOOLCHAIN_PARENT" "$TOOLCHAIN_NAME"
-          sha256sum formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst \
-            | tee formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst.sha256
+          ARCHIVE=formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst
+          tar --zstd -cf "$ARCHIVE" -C "$TOOLCHAIN_PARENT" "$TOOLCHAIN_NAME"
+          sha256sum "$ARCHIVE" | tee "$ARCHIVE.sha256"
           printf '%s\n' "$TOOLCHAIN_NAME" > formal-bootstrap/toolchain-directory.txt
+          split -b 300M -d -a 2 "$ARCHIVE" formal-bootstrap/lean-toolchain-v4.32.1-linux.part-
+          sha256sum formal-bootstrap/lean-toolchain-v4.32.1-linux.part-* \
+            | tee formal-bootstrap/parts.sha256
+          test -f formal-bootstrap/lean-toolchain-v4.32.1-linux.part-00
+          test -f formal-bootstrap/lean-toolchain-v4.32.1-linux.part-01
+          test -f formal-bootstrap/lean-toolchain-v4.32.1-linux.part-02
 
-      - name: Upload pinned toolchain artifact
+      - name: Upload part 00
         uses: actions/upload-artifact@v4
         with:
-          name: lean-toolchain-v4.32.1-linux
+          name: lean-toolchain-v4.32.1-linux-part-00
+          path: formal-bootstrap/lean-toolchain-v4.32.1-linux.part-00
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-toolchain-v4.32.1-linux-part-01
+          path: formal-bootstrap/lean-toolchain-v4.32.1-linux.part-01
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-toolchain-v4.32.1-linux-part-02
+          path: formal-bootstrap/lean-toolchain-v4.32.1-linux.part-02
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-toolchain-v4.32.1-linux-metadata
           path: |
-            formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst
             formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst.sha256
+            formal-bootstrap/parts.sha256
             formal-bootstrap/lean-version.txt
             formal-bootstrap/elan-version.txt
             formal-bootstrap/toolchain-directory.txt
