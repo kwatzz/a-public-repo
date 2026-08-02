@@ -1,0 +1,62 @@
+name: Sparse ordering Lean bootstrap
+
+on:
+  push:
+    branches:
+      - sparse-ordering-formal-bootstrap-20260802
+    paths:
+      - '.github/workflows/sparse-ordering-lean-bootstrap.yml'
+      - 'lean-toolchain'
+      - 'formal-bootstrap/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-toolchain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned Lean toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            -o /tmp/elan-init.sh
+          sh /tmp/elan-init.sh -y --no-modify-path \
+            --default-toolchain leanprover/lean4:v4.32.1
+          source "$HOME/.elan/env"
+          lean --version | tee formal-bootstrap/lean-version.txt
+          elan --version | tee formal-bootstrap/elan-version.txt
+
+      - name: Package exact installed toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$HOME/.elan/env"
+          LEAN_BIN="$(elan which lean)"
+          TOOLCHAIN_ROOT="$(dirname "$(dirname "$LEAN_BIN")")"
+          TOOLCHAIN_PARENT="$(dirname "$TOOLCHAIN_ROOT")"
+          TOOLCHAIN_NAME="$(basename "$TOOLCHAIN_ROOT")"
+          tar --zstd -cf formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst \
+            -C "$TOOLCHAIN_PARENT" "$TOOLCHAIN_NAME"
+          sha256sum formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst \
+            | tee formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst.sha256
+          printf '%s\n' "$TOOLCHAIN_NAME" > formal-bootstrap/toolchain-directory.txt
+
+      - name: Upload pinned toolchain artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lean-toolchain-v4.32.1-linux
+          path: |
+            formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst
+            formal-bootstrap/lean-toolchain-v4.32.1-linux.tar.zst.sha256
+            formal-bootstrap/lean-version.txt
+            formal-bootstrap/elan-version.txt
+            formal-bootstrap/toolchain-directory.txt
+          compression-level: 0
+          retention-days: 3
